@@ -1,351 +1,219 @@
+/*
+Description
+The problem is to multiply two positive big integers X, Y. (X, Y >= 0, Integer)
+Requirement: Test data is very big, therefore you must use a linked list to store an any big integer.
+
+Input
+The input contains 2n+1 lines.
+The first line contains the number of the case n.
+Then, the input will consist of a set of pairs of lines. Each line in pair contains one multiple.
+
+Output
+For each input pair of lines the output line should consist one integer the product.
+
+Sample input
+3
+12
+12
+2
+222222222222222222222222
+987654321123456789
+2
+
+Sample output
+144
+444444444444444444444444
+1975308642246913578
+*/
+
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdbool.h>
-#include <math.h>
 
-#define MAX_EXPR 200
+struct digit
+{
+    int n;
+    struct DIGIT* nextPtr;
+    struct DIGIT* previousPtr;
+};
+typedef struct digit DIGIT;
+typedef DIGIT* DIGITPTR;
 
-typedef struct listNode* LISTNODEPTR;
-typedef struct listNode{
-    LISTNODEPTR nextPtr;
-    LISTNODEPTR previousPtr;
-    double n;
-    char OP;
-}LISTNODE;
-
-typedef struct stackOP* STACKOPPTR;
-typedef struct stackOP{
-    char OP;
-    STACKOPPTR nextPtr;
-    STACKOPPTR previousPtr;
-}STACKOP;
-
-
-//general functions
-void initListNode(LISTNODEPTR);
-void initStackNode(STACKOPPTR);
-void readList(LISTNODEPTR*, LISTNODEPTR*, char*);
-double calculate(LISTNODEPTR*, LISTNODEPTR*);
-void print(double);
-
-//functions about reading numbers
-int readNUM(LISTNODEPTR*, LISTNODEPTR*, char*, int);
-bool ISNegative(char*, int);
-
-//functions about determining operation's order
-void readOP(LISTNODEPTR*, LISTNODEPTR*, STACKOPPTR*, STACKOPPTR*, char);
-void creatOP(LISTNODEPTR*, LISTNODEPTR*, char);
-bool ISPOPOP(STACKOPPTR*, STACKOPPTR*, char);
-int scoreOP(char);
-void pushOP(STACKOPPTR*, STACKOPPTR*, char);
-char popOP(STACKOPPTR*, STACKOPPTR*);
-bool ISOP(char);
-
+DIGITPTR insert(DIGITPTR*, DIGITPTR*, DIGITPTR, int);
+void add(DIGITPTR*, DIGITPTR*, DIGITPTR, DIGITPTR);
+DIGITPTR add_single(DIGITPTR*, DIGITPTR*, DIGITPTR, int);
+void add_carry(DIGITPTR);
+void print(DIGITPTR);
 
 int main()
 {
-    bool quit = false;
-    char expr[MAX_EXPR] = {0};
-    scanf("%s", expr);
-    if (expr[0] == '0' && expr[1] == '\0')
-        quit = true;
-    while (quit == false) {
-        LISTNODEPTR sPtr = NULL, ePtr = NULL;
-        readList(&sPtr, &ePtr, expr);
-        //print(sPtr);
-        print(calculate(&sPtr, &ePtr));
+    int n;
+    scanf("%d", &n);
+    getchar();
+    for (int i = 1; i <= n; i++) {
+        //Initialization
+        int count1 = 0, count2 = 0;
+        DIGITPTR startPtr1 = NULL, startPtr2 = NULL, endPtr1 = NULL, endPtr2 = NULL, currentPtr = NULL;
+        currentPtr = startPtr1;
 
-        for (int i = 0; i <= MAX_EXPR - 1; i++)
-            expr[i] = '\0';
-        scanf("%s", expr);
-        if (expr[0] == '0' && expr[1] == '\0')
-            quit = true;
+        //read the first big integer
+        char c = getchar();
+        while (c != '\n') {
+            currentPtr = insert(&startPtr1, &endPtr1, currentPtr, c - '0');
+            count1++;
+            c = getchar();
+        }
+
+        //read the second big integer
+        currentPtr = startPtr2;
+        c = getchar();
+        while (c != '\n') {
+            currentPtr = insert(&startPtr2, &endPtr2, currentPtr, c - '0');
+            count2++;
+            c = getchar();
+        }
+
+        //add these two big integers
+        DIGITPTR resSPtr = NULL, resEPtr = NULL;
+        if (count1 >= count2)
+            add(&resSPtr, &resEPtr, startPtr1, startPtr2);
+        else
+            add(&resSPtr, &resEPtr, startPtr2, startPtr1);
+
+        //print the result
+        print(resSPtr);
+        printf("\n");
     }
     return 0;
 }
 
-void initListNode(LISTNODEPTR targetPtr)
+/**
+ * the first parameter is the address of the start pointer
+ * the second parameter is the address of the end pointer
+ * the third parameter is the pointer indicating where we are going to add a new node
+ * the fourth parameter is the character we have read
+ *
+ * this function add a new node at this end of the list
+ * this function return the a new current pointer indicating where we are going to add a new node next
+ */
+DIGITPTR insert(DIGITPTR* sPtr, DIGITPTR* ePtr, DIGITPTR currentPtr, int n)
 {
-    targetPtr->n = 0;
-    targetPtr->OP = '\0';
-    targetPtr->nextPtr = NULL;
-    targetPtr->previousPtr = NULL;
+    DIGITPTR newPtr = malloc(sizeof(DIGIT));
+    if (newPtr != NULL){
+        //if the list hasn't any node
+        if (*sPtr == NULL) {
+            *sPtr = newPtr;
+            *ePtr = newPtr;
+            newPtr->n = n;
+            newPtr->nextPtr = NULL;
+            newPtr->previousPtr = NULL;
+        }
+        //if the list has at least one node
+        else {
+            currentPtr->nextPtr = newPtr;
+            *ePtr = newPtr;
+            newPtr->n = n;
+            newPtr->nextPtr = NULL;
+            newPtr->previousPtr = currentPtr;
+        }
+        return newPtr;
+    }
 }
 
-void initStackNode(STACKOPPTR targetPtr)
+/**
+ * the first parameter is the address of the result's start pointer
+ * the second parameter is the address of the result's end pointer
+ * the third parameter is the first big integer's start pointer
+ * the fourth parameter is the second big integer's start pointer
+ *
+ * this function multiply two big integers
+ * this function has no return
+ */
+void add(DIGITPTR* resSPtr, DIGITPTR* resEPtr, DIGITPTR startPtr1, DIGITPTR startPtr2)
 {
-    targetPtr->OP = '\0';
-    targetPtr->nextPtr = NULL;
-    targetPtr->previousPtr = NULL;
-}
-
-
-//read everything and create the polish notation expression list
-void readList(LISTNODEPTR* sPtr, LISTNODEPTR* ePtr, char* expr)
-{
-    int pos = 0;
-    STACKOPPTR sOPPtr = NULL, eOPPtr = NULL;
-
-    while (expr[pos] != '\n' && expr[pos] != '\0') {
-        LISTNODEPTR newListNode = malloc(sizeof(LISTNODE));
-        if (ISOP(expr[pos]) == true && ISNegative(expr, pos) == false)
-            readOP(sPtr, ePtr, &sOPPtr, &eOPPtr, expr[pos++]);
+    DIGITPTR currentPtr = NULL, currentPtr1 = NULL, currentPtr2 = startPtr2, tempPtr = NULL;
+    int mult1, mult2;
+    while (currentPtr2 != NULL) {
+        //I'm also confused
+        mult2 = currentPtr2->n;
+        currentPtr1 = startPtr1;
+        tempPtr = currentPtr;
+        tempPtr = add_single(resSPtr, resEPtr, tempPtr, 0);
+        while (currentPtr1 != NULL) {
+            mult1 = currentPtr1->n;
+            tempPtr = add_single(resSPtr, resEPtr, tempPtr, mult1 * mult2);
+            currentPtr1 = currentPtr1->nextPtr;
+        }
+        if (currentPtr == NULL)
+            currentPtr = *resSPtr;
         else
-            pos = readNUM(sPtr, ePtr, expr, pos);
+            currentPtr = currentPtr->nextPtr;
+        currentPtr2 = currentPtr2->nextPtr;
     }
-    while (eOPPtr != NULL)
-        creatOP(sPtr, ePtr, popOP(&sOPPtr, &eOPPtr));
-    //add two nodes: 0 + at the end of the list
-    LISTNODEPTR newNodePtr = malloc(sizeof(LISTNODE));
-    initListNode(newNodePtr);
-    newNodePtr->previousPtr = (*ePtr);
-    (*ePtr)->nextPtr = newNodePtr;
-    (*ePtr) = newNodePtr;
-
-    newNodePtr = malloc(sizeof(LISTNODE));
-    initListNode(newNodePtr);
-    newNodePtr->OP = '+';
-    newNodePtr->previousPtr = (*ePtr);
-    (*ePtr)->nextPtr = newNodePtr;
-    (*ePtr) = newNodePtr;
+    add_carry(*resEPtr);
 }
 
-//deal with the expression established by polish notation
-double calculate(LISTNODEPTR* sPtr, LISTNODEPTR* ePtr)
+/**
+ * the first parameter is the address of the result's start pointer
+ * the second parameter is the address of the result's end pointer
+ * the third parameter is the pointer indicating where we are going to operate
+ * the fourth parameter is the number we are going to operate
+ *
+ * this function is the cell of add function, it just add one number
+ * this function return a new pointer indicating where we are going to operate next
+ */
+DIGITPTR add_single(DIGITPTR* resSPtr, DIGITPTR* resEPtr, DIGITPTR tempPtr,int result)
 {
-    LISTNODEPTR currentPtr = (*sPtr);
+    //if it is at the end of the result list, we need to add another new node at the end of the list
+    if (tempPtr == NULL || tempPtr->nextPtr == NULL)
+        return insert(resSPtr, resEPtr, tempPtr, result);
+    //otherwise it is simple
+    else {
+        DIGITPTR storePtr = tempPtr->nextPtr;
+        storePtr->n += result;
+        return tempPtr->nextPtr;
+    }
+}
+
+/**
+ * the only parameter is the result's end pointer
+ *
+ * this function keep every node's number n < 10, in order to print
+ * this function has no return
+ */
+void add_carry(DIGITPTR resEPtr)
+{
+    DIGITPTR currentPtr = resEPtr;
+    int carry = 0;
+    //this condition means that we don't need to worry about whether the first node's n >= 10
+    while (currentPtr->previousPtr !=NULL) {
+        currentPtr->n += carry;
+        carry = currentPtr->n / 10;
+        currentPtr->n = currentPtr->n - 10 * carry;
+        currentPtr = currentPtr->previousPtr;
+    }
+    //but there is still possible that the second node pass on a carry to the first node
+    currentPtr->n += carry;
+}
+
+/**
+ * the only parameter is the start pointer
+ *
+ * this function print every node's number from the start pointer to the end of the list
+ * this function has no return
+ */
+void print(DIGITPTR startPtr)
+{
+    DIGITPTR currentPtr = startPtr;
+    //just make sure 0 * 0 = 0 and 10 * 10 = 100 instead of 10 * 10 = 0100
+    bool start = false;
     while (currentPtr != NULL) {
-        while (currentPtr->OP == '\0')
-            currentPtr = currentPtr->nextPtr;
-
-        LISTNODEPTR tempPtr = currentPtr->previousPtr;
-        switch (currentPtr->OP) {
-        case '+':
-            tempPtr->previousPtr->n += tempPtr->n;
-            break;
-        case '-':
-            tempPtr->previousPtr->n -= tempPtr->n;
-            break;
-        case '*':
-            tempPtr->previousPtr->n *= tempPtr->n;
-            break;
-        case '/':
-            tempPtr->previousPtr->n /= tempPtr->n;
-        default:
-            break;
+        if (currentPtr->nextPtr == NULL)
+            printf("%d", currentPtr->n);
+        else if (start || currentPtr->n) {
+            printf("%d", currentPtr->n);
+            start = true;
         }
-        //delete the second number node
-        tempPtr->previousPtr->nextPtr = currentPtr;
-        currentPtr->previousPtr = tempPtr->previousPtr;
-        initListNode(tempPtr);
-        free(tempPtr);
-        //delete the OP node
-        if (currentPtr->nextPtr == NULL) {
-            (*ePtr) = currentPtr->previousPtr;
-            (*ePtr)->nextPtr = NULL;
-            initListNode(currentPtr);
-            free(currentPtr);
-            currentPtr = NULL;
-        }
-        else {
-            currentPtr->previousPtr->nextPtr = currentPtr->nextPtr;
-            currentPtr->nextPtr->previousPtr = currentPtr->previousPtr;
-            tempPtr = currentPtr;
-            currentPtr = currentPtr->nextPtr;
-            initListNode(tempPtr);
-            free(tempPtr);
-        }
+        currentPtr = currentPtr->nextPtr;
     }
-    return (*sPtr)->n;
-}
-
-//print the result
-void print(double n)
-{
-    double absn;
-    if (n < 0) {
-        absn = fabs(n);
-        printf("-");
-    }
-    else
-        absn = n;
-    int INT = floor(absn);
-    if (INT == absn)
-        printf("%d", INT);
-    else {
-        double DIC = absn - INT;
-        printf("%d.", INT);
-        //precision 10e-8
-        int temp = floor(DIC * 1000000);
-        while (temp % 10 == 0)
-            temp /= 10;
-        printf("%d", temp);
-    }
-    printf("\n\n");
-}
-
-//deal with a number
-int readNUM(LISTNODEPTR* sPtr, LISTNODEPTR* ePtr, char* expr, int pos)
-{
-    double number = 0;
-    double k = 0.1;
-    bool decimal = false;
-    int sign = 1;
-    if (expr[pos] == '-') {
-        sign = -1;
-        pos++;
-    }
-    while ((expr[pos] - '0' >= 0 && expr[pos] - '9' <= 0) || expr[pos] == '.') {
-        if (expr[pos] == '.') {
-            decimal = true;
-            pos++;
-        }
-        else if (decimal == false) {
-            number *= 10;
-            number += (expr[pos++] - '0');
-        }
-        else {
-            number += (expr[pos++] - '0') * k;
-            k /= 10;
-        }
-    }
-
-    LISTNODEPTR newNodePtr = malloc(sizeof(LISTNODE));
-    initListNode(newNodePtr);
-    if ((*sPtr) == NULL) {
-        newNodePtr->n = sign * number;
-        (*sPtr) = newNodePtr;
-        (*ePtr) = newNodePtr;
-    }
-    else {
-        newNodePtr->previousPtr = (*ePtr);
-        newNodePtr->n = sign * number;
-        (*ePtr)->nextPtr = newNodePtr;
-        (*ePtr) = newNodePtr;
-    }
-    return pos;
-}
-
-//if negative then true else false
-bool ISNegative(char* expr, int pos)
-{
-    if (pos == 0 && expr[pos] == '-')
-        return true;
-    else if (expr[pos] == '-' && ISOP(expr[pos - 1]))
-        return true;
-    else
-        return false;
-}
-
-//deal with an OP
-void readOP(LISTNODEPTR* sPtr, LISTNODEPTR* ePtr, STACKOPPTR* sOPPtr, STACKOPPTR* eOPPtr, char OP)
-{
-    char c;
-    if (OP == ')') {
-        while ((*eOPPtr)->OP != '(') {
-            c = popOP(sOPPtr, eOPPtr);
-            creatOP(sPtr, ePtr, c);
-        }
-        popOP(sOPPtr, eOPPtr);
-    }
-    else {
-        while(ISPOPOP(sOPPtr, eOPPtr, OP)) {
-            c = popOP(sOPPtr, eOPPtr);
-            creatOP(sPtr, ePtr, c);
-        }
-        pushOP(sOPPtr, eOPPtr, OP);
-    }
-}
-
-//creat a listnode of OP
-void creatOP(LISTNODEPTR* sPtr, LISTNODEPTR* ePtr, char OP)
-{
-    LISTNODEPTR newNodePtr = malloc(sizeof(LISTNODE));
-    initListNode(newNodePtr);
-    newNodePtr->previousPtr = (*ePtr);
-    newNodePtr->OP = OP;
-    (*ePtr)->nextPtr = newNodePtr;
-    (*ePtr) = newNodePtr;
-}
-
-//if it needs pop then return true else false
-bool ISPOPOP(STACKOPPTR* sOPPtr, STACKOPPTR* eOPPtr, char OP)
-{
-    if ((*eOPPtr) == NULL)
-        return false;
-    else if((*eOPPtr)->OP == '(')
-        return false;
-    else if (scoreOP(OP) > scoreOP((*eOPPtr)->OP))
-        return false;
-    else
-        return true;
-}
-
-int scoreOP(char OP)
-{
-    switch (OP) {
-    case '+':
-    case '-':
-        return 1;
-        break;
-    case '*':
-    case '/':
-        return 2;
-        break;
-    case '(':
-        return 3;
-        break;
-    default:
-        break;
-    }
-}
-
-//push an OP into the stack
-void pushOP(STACKOPPTR* sOPPtr, STACKOPPTR* eOPPtr, char OP)
-{
-    STACKOPPTR newOPPtr = malloc(sizeof(STACKOP));
-    newOPPtr->OP = OP;
-    if (*sOPPtr == NULL) {
-        (*sOPPtr) = newOPPtr;
-        (*eOPPtr) = newOPPtr;
-        newOPPtr->nextPtr = NULL;
-        newOPPtr->previousPtr = NULL;
-    }
-    else {
-        (*eOPPtr)->nextPtr = newOPPtr;
-        newOPPtr->previousPtr = (*eOPPtr);
-        newOPPtr->nextPtr = NULL;
-        (*eOPPtr) = newOPPtr;
-    }
-}
-
-//delete an OP on the top of the stack
-char popOP(STACKOPPTR* sOPPtr, STACKOPPTR* eOPPtr)
-{
-    char OP;
-    if ((*eOPPtr)->previousPtr == NULL) {
-        OP = (*eOPPtr)->OP;
-        initStackNode(*eOPPtr);
-        free(*eOPPtr);
-        (*sOPPtr) = NULL;
-        (*eOPPtr) = NULL;
-    }
-    else {
-        STACKOPPTR tempPtr = (*eOPPtr)->previousPtr;
-        OP = (*eOPPtr)->OP;
-        initStackNode(*eOPPtr);
-        free(*eOPPtr);
-        (*eOPPtr) = tempPtr;
-        (*eOPPtr)->nextPtr = NULL;
-    }
-    return OP;
-}
-
-//if OP then true else false
-bool ISOP(char c)
-{
-    if (c == '+' || c == '-' || c == '*' || c == '/' || c == '(' || c == ')')
-        return true;
-    else
-        return false;
 }
