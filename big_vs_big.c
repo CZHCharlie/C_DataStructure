@@ -11,7 +11,7 @@ Then, the input will consist of a set of pairs of lines. Each line in pair conta
 Output
 For each input pair of lines the output line should consist one integer the product.
 
-Sample input
+Sample Input
 3
 12
 12
@@ -20,7 +20,7 @@ Sample input
 987654321123456789
 2
 
-Sample output
+Sample Output
 144
 444444444444444444444444
 1975308642246913578
